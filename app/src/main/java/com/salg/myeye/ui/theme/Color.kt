@@ -2,10 +2,10 @@ package com.salg.myeye.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
-
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+/** Near-black stage the eye lives on. Also used by the window background (res/values/colors.xml). */
+val Void = Color(0xFF0B0B0D)
+val Sclera = Color(0xFFF4F1EA)
+val Outline = Color(0xFF141416)
+val IrisTeal = Color(0xFF1FA3A3)
+val Highlight = Color(0xFFFFFFFF)
+val DebugGreen = Color(0xFF7CFF8A)
