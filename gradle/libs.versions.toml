@@ -1,4 +1,9 @@
 [versions]
+# SDK levels, read by the convention plugins in build-logic/
+compileSdk = "37"
+targetSdk = "37"
+minSdk = "31"
+
 agp = "9.2.1"
 coreKtx = "1.19.1"
 junit = "4.13.2"
@@ -37,6 +42,19 @@ androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 
+# Gradle plugins as libraries, for the convention plugins in build-logic/
+android-gradlePlugin = { group = "com.android.tools.build", name = "gradle", version.ref = "agp" }
+kotlin-gradlePlugin = { group = "org.jetbrains.kotlin", name = "kotlin-gradle-plugin", version.ref = "kotlin" }
+compose-gradlePlugin = { group = "org.jetbrains.kotlin", name = "compose-compiler-gradle-plugin", version.ref = "kotlin" }
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+android-library = { id = "com.android.library", version.ref = "agp" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+
+# Convention plugins (build-logic/)
+myeye-android-application = { id = "myeye.android.application" }
+myeye-android-library = { id = "myeye.android.library" }
+myeye-android-compose = { id = "myeye.android.compose" }
+myeye-jvm-library = { id = "myeye.jvm.library" }

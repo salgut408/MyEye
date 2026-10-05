@@ -3,6 +3,8 @@
 /local.properties
 .DS_Store
 /build
+# Build outputs of every module, including build-logic/
+build/
 /captures
 .externalNativeBuild
 .cxx
