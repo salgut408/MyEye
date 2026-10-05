@@ -335,4 +335,125 @@ class ObsessiveWatcherTest {
         now += config.reliefAcquireMs
         assertTrue(frame(f).watch is Watch.Acquiring) // back to the patient 400 ms
     }
+
+    // --- Sleep & wake ---------------------------------------------------------------------------
+
+    /** Empty-room frames at 10 fps, then ticks fill the gaps like the ViewModel would. */
+    private fun alone(durationMs: Long, luma: Int = 120): WatcherState = frames(durationMs, luma = luma)
+
+    @Test
+    fun `never drowsy while it has someone to watch`() {
+        trackFace(face(1))
+        val s = frames(config.sleepAfterMs + 5_000, face(1))
+        assertEquals(Alertness.AWAKE, s.alertness)
+        assertEquals(0f, s.drowsiness)
+        assertTrue(s.watch is Watch.Tracking)
+    }
+
+    @Test
+    fun `waiting for someone who left is not being alone`() {
+        trackFace(face(1))
+        frame()
+        assertNull(watcher.state.aloneSince)
+        assertTrue(watcher.state.watch is Watch.Lost)
+    }
+
+    @Test
+    fun `a stranger passing by resets the alone timer`() {
+        alone(40_000)
+        frame(face(9)) // anyone at all
+        val s = alone(40_000)
+        assertEquals(Alertness.AWAKE, s.alertness)
+    }
+
+    @Test
+    fun `gets drowsy for the last 15 s, then falls asleep at 60 s alone`() {
+        val start = now
+        frame()
+        assertEquals(Alertness.AWAKE, watcher.onTick(start + 44_999).alertness)
+        val halfway = watcher.onTick(start + 52_500)
+        assertEquals(Alertness.DROWSY, halfway.alertness)
+        assertEquals(0.5f, halfway.drowsiness, 0.001f)
+
+        // Ticks alone are enough: no frames needed for time to pass.
+        val asleep = watcher.onTick(start + 60_000)
+        assertEquals(Alertness.ASLEEP, asleep.alertness)
+        assertEquals(SleepReason.ALONE, asleep.sleepReason)
+        assertNull(asleep.gaze)
+    }
+
+    @Test
+    fun `a face while drowsy just perks it up, without a startle`() {
+        alone(50_000)
+        assertEquals(Alertness.DROWSY, watcher.state.alertness)
+        val s = frame(face(1))
+        assertEquals(Alertness.AWAKE, s.alertness)
+        assertEquals(0f, s.drowsiness)
+        assertFalse(s.wake)
+        assertTrue(s.watch is Watch.Acquiring)
+    }
+
+    @Test
+    fun `a face while asleep startles it awake once and it goes for the biggest face`() {
+        alone(config.sleepAfterMs + 1_000)
+        assertTrue(watcher.state.isAsleep)
+
+        val s = frame(face(1, size = 0.1f), face(2, size = 0.3f), stepMs = 33)
+        assertTrue(s.wake)
+        assertEquals(Alertness.AWAKE, s.alertness)
+        assertEquals(2, (s.watch as Watch.Acquiring).id)
+        assertFalse((s.watch as Watch.Acquiring).desperate)
+
+        assertFalse(frame(face(2, size = 0.3f), stepMs = 33).wake)
+        assertFalse(watcher.onTick(now).wake)
+    }
+
+    @Test
+    fun `asleep, darkness doesn't make it panic`() {
+        alone(config.sleepAfterMs + 1_000)
+        val s = frames(20_000, luma = 5)
+        assertTrue(s.isAsleep)
+        assertEquals(Sight.DARK, s.sight) // still measured, for the overlay
+        assertNull(s.franticIntensity)
+        assertFalse(s.isFrantic)
+    }
+
+    @Test
+    fun `a long panic exhausts it into sleep`() {
+        watcher.onPerception(Perception.NoPermission, 0)
+        val maxPanic = watcher.onTick(config.franticRampMs + config.exhaustAfterMs - 1)
+        assertEquals(1f, maxPanic.franticIntensity)
+        assertEquals(Alertness.AWAKE, maxPanic.alertness)
+
+        val exhausted = watcher.onTick(config.franticRampMs + config.exhaustAfterMs)
+        assertTrue(exhausted.isAsleep)
+        assertEquals(SleepReason.EXHAUSTED, exhausted.sleepReason)
+        assertNull(exhausted.franticIntensity)
+
+        // Still no permission: stays asleep rather than panicking again.
+        assertTrue(watcher.onPerception(Perception.NoPermission, 100_000).isAsleep)
+    }
+
+    @Test
+    fun `waking from an exhausted sleep is a startle, not relief`() {
+        // Dark only counts as blind after darkAfterMs.
+        frames(config.darkAfterMs + config.franticRampMs + config.exhaustAfterMs + 500, luma = 5)
+        assertEquals(SleepReason.EXHAUSTED, watcher.state.sleepReason)
+
+        val f = face(1)
+        val woke = frame(f, stepMs = 50)
+        assertTrue(woke.wake)
+        val all = (1..20).map { frame(f, stepMs = 50) }
+        assertTrue(all.any { it.watch is Watch.Tracking })
+        assertTrue(all.none { it.relief })
+    }
+
+    @Test
+    fun `sleepNow puts it to sleep immediately`() {
+        trackFace(face(1))
+        val s = watcher.sleepNow(now)
+        assertTrue(s.isAsleep)
+        assertEquals(Watch.Idle, s.watch)
+        assertTrue(frame(face(1)).wake)
+    }
 }

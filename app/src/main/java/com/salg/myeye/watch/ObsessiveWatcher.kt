@@ -7,6 +7,11 @@ import kotlin.math.sign
 
 enum class Sight { SEEING, DARK, NO_PERMISSION, CAMERA_ERROR }
 
+/** Whether the eye is awake at all. Asleep overrides everything else, including panic. */
+enum class Alertness { AWAKE, DROWSY, ASLEEP }
+
+enum class SleepReason { ALONE, EXHAUSTED }
+
 /** The obsessive policy. Only meaningful while [Sight.SEEING]. */
 sealed interface Watch {
     data object Idle : Watch
@@ -38,6 +43,13 @@ data class WatcherState(
     val mirrorBlinkStart: Boolean = false,
     /** One-shot: true only on the update where the eye finds someone right after being blind. */
     val relief: Boolean = false,
+    val alertness: Alertness = Alertness.AWAKE,
+    /** 0 = alert … 1 = about to fall asleep (1 while asleep). Drives the drooping lids. */
+    val drowsiness: Float = 0f,
+    /** Why it's asleep, or null when awake. */
+    val sleepReason: SleepReason? = null,
+    /** One-shot: a face just woke the eye up (it startles). */
+    val wake: Boolean = false,
     /** Latest camera frame, kept for the debug overlay. */
     val lastFrame: Perception.Frame? = null,
     // Bookkeeping, exposed for debugging and tests.
@@ -45,8 +57,11 @@ data class WatcherState(
     val blindSince: Long? = null,
     val regainedSightAt: Long? = null,
     val lastMirrorBlinkAt: Long? = null,
+    /** Since when it has been seeing an empty room (null while anyone is around or it's blind). */
+    val aloneSince: Long? = null,
 ) {
     val isFrantic get() = franticIntensity != null
+    val isAsleep get() = alertness == Alertness.ASLEEP
     val targetId: Int?
         get() = when (val w = watch) {
             Watch.Idle -> null
@@ -61,8 +76,12 @@ data class WatcherState(
  * in, so every behavior is reproducible in tests.
  *
  * Feed it every [Perception] via [onPerception], and call [onTick] periodically so purely
- * time-based changes (panic escalating, giving up on someone who left) happen even when no new
- * perception arrives.
+ * time-based changes (panic escalating, giving up on someone who left, falling asleep) happen even
+ * when no new perception arrives.
+ *
+ * Alertness sits on top of Sight and Watch: alone for [WatcherConfig.sleepAfterMs] (drooping during
+ * the last [WatcherConfig.drowsyLeadMs]) or exhausted by a long panic, the eye falls asleep. Asleep,
+ * it ignores everything (darkness included) until any face appears, which startles it awake.
  */
 class ObsessiveWatcher(private val config: WatcherConfig = WatcherConfig()) {
 
@@ -71,19 +90,11 @@ class ObsessiveWatcher(private val config: WatcherConfig = WatcherConfig()) {
 
     fun onPerception(p: Perception, nowMs: Long): WatcherState {
         val prev = state
-        var darkSince = prev.darkSince
-        val sight = when (p) {
-            Perception.NoPermission -> Sight.NO_PERMISSION
-            is Perception.CameraError -> Sight.CAMERA_ERROR
-            is Perception.Frame -> {
-                darkSince = if (p.meanLuma < config.darkEnterLuma) darkSince ?: nowMs else null
-                when {
-                    prev.sight == Sight.DARK && p.meanLuma <= config.darkExitLuma -> Sight.DARK
-                    darkSince != null && nowMs - darkSince >= config.darkAfterMs -> Sight.DARK
-                    else -> Sight.SEEING
-                }
-            }
+        if (prev.isAsleep) {
+            state = whileAsleep(prev, p, nowMs)
+            return state
         }
+        val (sight, darkSince) = measureSight(prev, p, nowMs)
         val seeing = sight == Sight.SEEING
         val regainedSightAt = when {
             !seeing -> null
@@ -119,19 +130,107 @@ class ObsessiveWatcher(private val config: WatcherConfig = WatcherConfig()) {
         val wasClosed = prev.mirrorBlink && prev.targetId == next.targetId
         val rested = prev.lastMirrorBlinkAt?.let { nowMs - it >= config.mirrorBlinkRefractoryMs } ?: true
         val blink = next.mirrorBlink && !wasClosed && rested
-        state = next.copy(
-            mirrorBlinkStart = blink,
-            lastMirrorBlinkAt = if (blink) nowMs else prev.lastMirrorBlinkAt,
+        // Alone = seeing, minding its own business, and nobody at all in the frame.
+        val alone = seeing && next.watch == Watch.Idle && p is Perception.Frame && p.faces.isEmpty()
+        state = settle(
+            next.copy(
+                mirrorBlinkStart = blink,
+                lastMirrorBlinkAt = if (blink) nowMs else prev.lastMirrorBlinkAt,
+                aloneSince = if (alone) prev.aloneSince ?: nowMs else null,
+                wake = false,
+            ),
+            nowMs,
         )
         return state
     }
 
     fun onTick(nowMs: Long): WatcherState {
-        state = derive(
-            state.copy(watch = timeout(state.watch, nowMs), relief = false, mirrorBlinkStart = false),
+        val s = state.copy(relief = false, mirrorBlinkStart = false, wake = false)
+        state = if (s.isAsleep) s else settle(derive(s.copy(watch = timeout(s.watch, nowMs)), nowMs), nowMs)
+        return state
+    }
+
+    /** Puts the eye to sleep right away (debug "Nap now"). */
+    fun sleepNow(nowMs: Long): WatcherState {
+        state = fallAsleep(state, SleepReason.ALONE, nowMs)
+        return state
+    }
+
+    private fun measureSight(prev: WatcherState, p: Perception, nowMs: Long): Pair<Sight, Long?> = when (p) {
+        Perception.NoPermission -> Sight.NO_PERMISSION to prev.darkSince
+        is Perception.CameraError -> Sight.CAMERA_ERROR to prev.darkSince
+        is Perception.Frame -> {
+            val darkSince = if (p.meanLuma < config.darkEnterLuma) prev.darkSince ?: nowMs else null
+            val sight = when {
+                prev.sight == Sight.DARK && p.meanLuma <= config.darkExitLuma -> Sight.DARK
+                darkSince != null && nowMs - darkSince >= config.darkAfterMs -> Sight.DARK
+                else -> Sight.SEEING
+            }
+            sight to darkSince
+        }
+    }
+
+    /** Decides how awake the eye is from how long it has been alone or panicking. */
+    private fun settle(s: WatcherState, nowMs: Long): WatcherState {
+        val blindSince = s.blindSince
+        if (blindSince != null && nowMs - blindSince >= config.franticRampMs + config.exhaustAfterMs) {
+            return fallAsleep(s, SleepReason.EXHAUSTED, nowMs)
+        }
+        val aloneSince = s.aloneSince
+            ?: return s.copy(alertness = Alertness.AWAKE, drowsiness = 0f, sleepReason = null)
+        val alone = nowMs - aloneSince
+        if (alone >= config.sleepAfterMs) return fallAsleep(s, SleepReason.ALONE, nowMs)
+        val drowsiness = ((alone - (config.sleepAfterMs - config.drowsyLeadMs)).toFloat() / config.drowsyLeadMs)
+            .coerceIn(0f, 1f)
+        return s.copy(
+            alertness = if (drowsiness > 0f) Alertness.DROWSY else Alertness.AWAKE,
+            drowsiness = drowsiness,
+            sleepReason = null,
+        )
+    }
+
+    private fun fallAsleep(s: WatcherState, reason: SleepReason, nowMs: Long) = derive(
+        s.copy(
+            alertness = Alertness.ASLEEP,
+            sleepReason = reason,
+            drowsiness = 1f,
+            watch = Watch.Idle,
+            blindSince = null, // panic is over; sleep overrides it
+            aloneSince = null,
+            regainedSightAt = null,
+            relief = false,
+            mirrorBlinkStart = false,
+            wake = false,
+        ),
+        nowMs,
+    )
+
+    /** Asleep: keep measuring the light (for the overlay) but only a face matters. */
+    private fun whileAsleep(prev: WatcherState, p: Perception, nowMs: Long): WatcherState {
+        val (sight, darkSince) = measureSight(prev, p, nowMs)
+        val asleep = prev.copy(
+            sight = sight,
+            darkSince = darkSince,
+            lastFrame = (p as? Perception.Frame) ?: prev.lastFrame,
+            relief = false,
+            mirrorBlinkStart = false,
+            wake = false,
+        )
+        val face = (p as? Perception.Frame)?.faces?.maxByOrNull { it.size } ?: return asleep
+        // Startled awake: straight to the face that woke it. Startle replaces relief.
+        return derive(
+            asleep.copy(
+                alertness = Alertness.AWAKE,
+                sleepReason = null,
+                drowsiness = 0f,
+                wake = true,
+                watch = Watch.Acquiring(face.id, since = nowMs, face = face, desperate = false),
+                blindSince = if (sight == Sight.SEEING) null else nowMs,
+                regainedSightAt = null,
+                aloneSince = null,
+            ),
             nowMs,
         )
-        return state
     }
 
     private fun timeout(watch: Watch, nowMs: Long): Watch =

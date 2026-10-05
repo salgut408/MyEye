@@ -33,6 +33,13 @@ data class WatcherConfig(
     /** Minimum time between mirrored blinks; ML Kit's eye classification flickers near the threshold. */
     val mirrorBlinkRefractoryMs: Long = 600,
 
+    /** Alone (seeing, nobody in view) this long → the eye falls asleep… */
+    val sleepAfterMs: Long = 60_000,
+    /** …getting drowsy (lids drooping) during this last stretch before it does. */
+    val drowsyLeadMs: Long = 15_000,
+    /** At maximum panic (after [franticRampMs]) for this long → exhausted, it falls asleep. */
+    val exhaustAfterMs: Long = 60_000,
+
     /** Face sizes mapped to closeness 0 (far) … 1 (close); closeness dilates the pupil. */
     val farSize: Float = 0.12f,
     val nearSize: Float = 0.45f,
