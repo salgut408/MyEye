@@ -13,3 +13,6 @@ firebase-debug.log
 
 # IDE state is per-machine
 /.idea/
+
+# Local Claude Code settings (kept on this machine, not in the repo)
+/.claude/
