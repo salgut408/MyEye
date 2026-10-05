@@ -1,6 +1,8 @@
 package com.salg.myeye.camera
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 import java.nio.ByteBuffer
@@ -74,5 +76,19 @@ class FaceMappingTest {
     fun `mean luma treats bytes as unsigned`() {
         assertEquals(255, meanLuma(ByteBuffer.wrap(ByteArray(32) { 0xFF.toByte() })))
         assertEquals(0, meanLuma(ByteBuffer.allocate(0)))
+    }
+
+    @Test
+    fun `low power analyzes the first frame, then one per second`() {
+        assertFalse(shouldSkipFrame(lowPower = true, timestampMs = 5_000, lastAnalyzedMs = null))
+        assertTrue(shouldSkipFrame(lowPower = true, timestampMs = 5_500, lastAnalyzedMs = 5_000))
+        assertFalse(shouldSkipFrame(lowPower = true, timestampMs = 6_000, lastAnalyzedMs = 5_000))
+        // Sensor timestamps can be huge; no overflow tricks.
+        assertFalse(shouldSkipFrame(lowPower = true, timestampMs = Long.MAX_VALUE / 2, lastAnalyzedMs = null))
+    }
+
+    @Test
+    fun `awake, no frame is ever skipped`() {
+        assertFalse(shouldSkipFrame(lowPower = false, timestampMs = 5_010, lastAnalyzedMs = 5_000))
     }
 }

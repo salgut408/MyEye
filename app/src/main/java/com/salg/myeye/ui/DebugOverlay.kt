@@ -27,7 +27,9 @@ import com.salg.myeye.EyeUiState
 import com.salg.myeye.SourceMode
 import com.salg.myeye.camera.FakeScenarios
 import com.salg.myeye.ui.theme.DebugGreen
+import com.salg.myeye.watch.Alertness
 import com.salg.myeye.watch.Watch
+import com.salg.myeye.watch.WatcherState
 import java.util.Locale
 
 /**
@@ -39,6 +41,7 @@ fun DebugOverlay(
     state: EyeUiState,
     showSourcePicker: Boolean,
     onSelectSource: (SourceMode) -> Unit,
+    onNap: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val w = state.watcher
@@ -61,6 +64,7 @@ fun DebugOverlay(
 
         val lines = buildList {
             add("sight   ${w.sight}")
+            add("alert   ${w.alertLabel}")
             add("watch   ${w.watch.label}")
             add("target  ${w.targetId ?: "–"}")
             add("faces   ${frame?.faces?.joinToString { "#${it.id} size ${"%.2f".fmt(it.size)}" } ?: "–"}")
@@ -91,8 +95,9 @@ fun DebugOverlay(
                     .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
                     .padding(horizontal = 8.dp),
             ) {
+                FilterChip(selected = w.isAsleep, onClick = onNap, label = { Text("Nap now") })
                 val options = listOf(SourceMode.Camera) +
-                    (FakeScenarios.all + FakeScenarios.Tour).map { SourceMode.Fake(it) }
+                    (FakeScenarios.all + FakeScenarios.Tour + FakeScenarios.sleepy).map { SourceMode.Fake(it) }
                 options.forEach { option ->
                     FilterChip(
                         selected = option == state.source,
@@ -109,6 +114,13 @@ private val SourceMode.label
     get() = when (this) {
         SourceMode.Camera -> "Camera"
         is SourceMode.Fake -> "Fake: ${scenario.name}"
+    }
+
+private val WatcherState.alertLabel: String
+    get() = when (alertness) {
+        Alertness.AWAKE -> "AWAKE"
+        Alertness.DROWSY -> "DROWSY ${(drowsiness * 100).toInt()}%"
+        Alertness.ASLEEP -> "ASLEEP (${sleepReason?.name?.lowercase() ?: "?"})"
     }
 
 private val Watch.label: String

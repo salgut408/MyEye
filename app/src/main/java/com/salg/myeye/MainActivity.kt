@@ -51,6 +51,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onSelectSource = viewModel::useSource,
                     showSourcePicker = BuildConfig.DEBUG,
+                    onNap = viewModel::sleepNow,
                 )
             }
         }

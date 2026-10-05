@@ -72,9 +72,13 @@ object CartoonEyeRenderer : EyeRenderer {
         val outline = Stroke(geo.outlineWidth, cap = StrokeCap.Round)
         drawPath(aperture, style.outline, style = outline)
         // The lid edges carry the outline when the eye is (nearly) closed and the aperture vanishes.
+        // A dark line would vanish on the dark stage, so a closing lid edge lightens toward the
+        // sclera color: a sleeping eye still reads as a soft curve.
+        val closed = (1f - expression.lidOpen / 0.15f).coerceIn(0f, 1f)
+        val lidEdge = lerp(style.outline, style.sclera.copy(alpha = 0.85f), closed)
         clipPath(oval) {
-            drawPath(upperLid, style.outline, style = outline)
-            drawPath(lowerLid, style.outline, style = outline)
+            drawPath(upperLid, lidEdge, style = outline)
+            drawPath(lowerLid, lidEdge, style = outline)
         }
 
         val zStroke = Stroke(geo.outlineWidth * 0.7f, cap = StrokeCap.Round, join = StrokeJoin.Round)

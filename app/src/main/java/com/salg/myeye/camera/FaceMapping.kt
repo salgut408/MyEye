@@ -41,6 +41,13 @@ fun mapFace(
     )
 }
 
+/**
+ * Low-power throttle: while [lowPower], analyze at most one frame per
+ * [FaceSource.LOW_POWER_INTERVAL_MS]. The first frame is always analyzed.
+ */
+fun shouldSkipFrame(lowPower: Boolean, timestampMs: Long, lastAnalyzedMs: Long?): Boolean =
+    lowPower && lastAnalyzedMs != null && timestampMs - lastAnalyzedMs < FaceSource.LOW_POWER_INTERVAL_MS
+
 /** The lower of two eye-open probabilities (either may be unknown); one closed eye counts as closed. */
 fun eyesOpen(left: Float?, right: Float?): Float? = listOfNotNull(left, right).minOrNull()
 

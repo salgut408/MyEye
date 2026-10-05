@@ -30,6 +30,7 @@ fun WatcherScreen(
     onSelectSource: (SourceMode) -> Unit,
     showSourcePicker: Boolean,
     modifier: Modifier = Modifier,
+    onNap: () -> Unit = {},
 ) {
     var debugVisible by rememberSaveable { mutableStateOf(false) }
     Box(
@@ -54,7 +55,7 @@ fun WatcherScreen(
             modifier = Modifier.fillMaxSize(),
         )
         if (debugVisible) {
-            DebugOverlay(state, showSourcePicker, onSelectSource)
+            DebugOverlay(state, showSourcePicker, onSelectSource, onNap)
         }
     }
 }

@@ -71,10 +71,10 @@ class CameraFaceSource(private val context: Context) : FaceSource {
             )
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .build()
-        var lastAnalyzedMs = Long.MIN_VALUE // only touched on the analysis thread
+        var lastAnalyzedMs: Long? = null // only touched on the analysis thread
         analysis.setAnalyzer(executor) { image ->
             val timestampMs = image.imageInfo.timestamp / 1_000_000
-            if (lowPower.value && timestampMs - lastAnalyzedMs < FaceSource.LOW_POWER_INTERVAL_MS) {
+            if (shouldSkipFrame(lowPower.value, timestampMs, lastAnalyzedMs)) {
                 // Asleep: drop the frame before any work (luma, ML Kit), the main battery cost.
                 image.close()
             } else {

@@ -9,6 +9,7 @@ The eye has a personality:
 - **Frantic when blind.** Cover the camera, turn off the lights, or deny the permission, and it searches wildly. The longer it's blind, the faster and wider it searches, and the sclera grows bloodshot.
 - **Relieved.** When it sees again it grabs the first face fast, constricts its pupil, and takes one slow blink.
 - **A mirror.** When its person blinks, it blinks too. Closer people dilate its pupil. Left alone, it wanders, blinks and breathes.
+- **Sleepy.** After a minute with nobody around, its lids droop and it falls asleep, with "Z z z" drifting up. A long panic exhausts it into sleep too. Any face startles it awake. Asleep, it only looks at about one frame per second, to save battery.
 
 ## Privacy
 
@@ -18,7 +19,7 @@ Everything happens on the device. Camera frames and face data are never saved, u
 
 - **First launch:** the app asks for the camera. Until it gets it, the eye panics.
 - **Tap the eye** to ask again. If the system won't show the dialog anymore, the tap opens the app's settings page. Coming back with the permission granted works immediately.
-- **Long-press** toggles the debug overlay: sight, watch state, target id, face boxes, eye-open probability, mean luma and analysis FPS. In debug builds, the chips at the bottom swap the camera for scripted fake scenarios (walk across, stranger steps closer, leaves and returns, lights off, blinker, or all of them in a loop). This is how you tune on an emulator with no camera.
+- **Long-press** toggles the debug overlay: sight, alertness, watch state, target id, face boxes, eye-open probability, mean luma and analysis FPS. In debug builds, the chips at the bottom swap the camera for scripted fake scenarios (walk across, stranger steps closer, leaves and returns, lights off, blinker, all of them in a loop, plus two slow ones for sleep: nobody home, and covered for a long time). **Nap now** puts the eye to sleep immediately. This is how you tune on an emulator with no camera.
 
 ## Build
 
@@ -39,7 +40,7 @@ FaceSource ──► WatcherViewModel ──► StateFlow<EyeUiState> ──► 
 ```
 
 - `camera/`: CameraX `ImageAnalysis` (front, ~640×480, keep-only-latest) and ML Kit face detection (bundled model, fast, with tracking and eye classification). It emits `Perception`s: faces in normalized, mirrored coordinates plus the frame's mean luma.
-- `watch/`: the personality, a pure state machine with time passed in. **Sight** (seeing / dark / no permission / camera error) and **Watch** (Idle → Acquiring → Tracking → Lost).
+- `watch/`: the personality, a pure state machine with time passed in. **Sight** (seeing / dark / no permission / camera error), **Watch** (Idle → Acquiring → Tracking → Lost) and **Alertness** (awake / drowsy / asleep).
 - `ui/eye/`: the eye. Geometry is pure math; `CartoonEyeRenderer` draws it as a pure function of gaze, expression and style; `LivingEye` animates it.
 
 ## Tuning
@@ -59,6 +60,9 @@ Every threshold of the personality is in [`WatcherConfig`](app/src/main/java/com
 | `lookAfterEdge` | 0.6 | only look after people who left right at the edge | look after anyone who left off-center |
 | `lookAfterPush` | 0.25 | stare further past the edge they left by | hold closer to where they were last seen |
 | `franticRampMs` | 10000 | panic builds slowly | reach full panic quickly |
+| `sleepAfterMs` | 60000 | stay awake longer in an empty room | fall asleep sooner (more battery saved) |
+| `drowsyLeadMs` | 15000 | a longer, more visible nod-off | drop off more abruptly |
+| `exhaustAfterMs` | 60000 | panic longer at full intensity before passing out | pass out sooner when blind |
 | `mirrorBlinkBelow` | 0.3 | blink with people more readily (more false blinks) | only mirror clear, full blinks |
 | `mirrorBlinkRefractoryMs` | 600 | fewer mirrored blinks from flickering detection | mirror rapid blinking |
 | `farSize` / `nearSize` | 0.12 / 0.45 | (the face sizes mapped to "far" and "close") | |
