@@ -29,6 +29,7 @@ android {
 
 dependencies {
     implementation(project(":core:camera"))
+    implementation(project(":core:ui"))
     implementation(project(":core:watch"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)

@@ -26,5 +26,6 @@ dependencyResolutionManagement {
 rootProject.name = "My Eye"
 include(":app")
 include(":core:camera")
+include(":core:ui")
 include(":core:watch")
  
