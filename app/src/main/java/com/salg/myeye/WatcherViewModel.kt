@@ -40,6 +40,8 @@ data class EyeUiState(
     val behavior: EyeBehavior = EyeBehavior.Idle,
     /** Increments once per relief moment; the eye plays it when this changes. */
     val reliefKey: Int = 0,
+    /** Increments each time the watched person blinks; the eye blinks with them. */
+    val blinkKey: Int = 0,
     /** Full watcher state, for the debug overlay. */
     val watcher: WatcherState = WatcherState(),
     val analysisFps: Float = 0f,
@@ -66,6 +68,7 @@ class WatcherViewModel(
     private val cameraPermission = MutableStateFlow<Boolean?>(null) // null = not known yet
     private val source = MutableStateFlow(initialSource)
     private var reliefKey = 0
+    private var blinkKey = 0
     private val fps = FpsMeter()
 
     fun onCameraPermission(granted: Boolean) {
@@ -79,7 +82,8 @@ class WatcherViewModel(
     val uiState: StateFlow<EyeUiState> = channelFlow {
         suspend fun publish(s: WatcherState) {
             if (s.relief) reliefKey++
-            send(EyeUiState(s.toBehavior(), reliefKey, s, fps.value, source.value))
+            if (s.mirrorBlinkStart) blinkKey++
+            send(EyeUiState(s.toBehavior(), reliefKey, blinkKey, s, fps.value, source.value))
         }
         launch {
             while (true) {
@@ -133,7 +137,7 @@ fun WatcherState.toBehavior(): EyeBehavior {
     return when (watch) {
         Watch.Idle -> EyeBehavior.Idle
         is Watch.Acquiring -> EyeBehavior.Acquiring(target)
-        is Watch.Tracking -> EyeBehavior.Tracking(target, closeness, mirrorBlink)
+        is Watch.Tracking -> EyeBehavior.Tracking(target, closeness)
         is Watch.Lost -> EyeBehavior.Lost(target)
     }
 }

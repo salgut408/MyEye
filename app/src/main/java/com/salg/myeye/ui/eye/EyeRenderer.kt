@@ -47,7 +47,7 @@ object CartoonEyeRenderer : EyeRenderer {
         drawPath(oval, style.lid)
 
         clipPath(aperture) {
-            drawPath(oval, style.sclera)
+            drawPath(oval, lerp(style.sclera, style.strainedSclera, expression.strain.coerceIn(0f, 1f)))
             // Soft shadow the upper lid casts on the eyeball.
             drawPath(upperLid, Color.Black.copy(alpha = 0.12f), style = Stroke(geo.radiusY * 0.22f))
 

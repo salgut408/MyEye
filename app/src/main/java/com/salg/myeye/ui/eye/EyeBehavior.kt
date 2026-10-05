@@ -13,15 +13,8 @@ sealed interface EyeBehavior {
 
     data class Acquiring(val target: Offset) : EyeBehavior
 
-    /**
-     * @param closeness 0 = far, 1 = very close; dilates the pupil.
-     * @param mirrorBlink the watched person's eyes are closed, so the eye closes too.
-     */
-    data class Tracking(
-        val target: Offset,
-        val closeness: Float = 0f,
-        val mirrorBlink: Boolean = false,
-    ) : EyeBehavior
+    /** @param closeness 0 = far, 1 = very close; dilates the pupil. */
+    data class Tracking(val target: Offset, val closeness: Float = 0f) : EyeBehavior
 
     data class Lost(val holdAt: Offset) : EyeBehavior
 

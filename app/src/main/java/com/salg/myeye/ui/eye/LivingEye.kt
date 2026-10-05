@@ -4,6 +4,10 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -33,12 +37,14 @@ import kotlin.random.Random
  * gaze, lids and pupil, plus the eye's own life (saccades, blinks, frantic searching, tremor).
  *
  * @param reliefKey bump this to play the one-shot relief moment (slow blink + pupil constriction).
+ * @param blinkKey bump this to blink once (mirroring the watched person's blink).
  */
 @Composable
 fun LivingEye(
     behavior: EyeBehavior,
     modifier: Modifier = Modifier,
     reliefKey: Int = 0,
+    blinkKey: Int = 0,
     style: EyeStyle = EyeStyle(),
     renderer: EyeRenderer = CartoonEyeRenderer,
 ) {
@@ -48,6 +54,7 @@ fun LivingEye(
     val squint = remember { Animatable(EyeExpression.Idle.squint) }
     val pupil = remember { Animatable(EyeExpression.Idle.pupil) }
     val blink = remember { Animatable(0f) } // 1 = fully closed, multiplied over lidOpen
+    val strain = remember { Animatable(0f) }
     var tremor by remember { mutableStateOf(Offset.Zero) }
     var relieving by remember { mutableStateOf(false) }
     val current by rememberUpdatedState(behavior)
@@ -66,13 +73,33 @@ fun LivingEye(
         launch { pupil.animateTo(resting.pupil, PupilSpring) }
     }
 
+    // The longer it's blind, the more strained (bloodshot) the eye gets; it recovers slowly.
+    val targetStrain = (behavior as? EyeBehavior.Frantic)?.intensity?.coerceIn(0f, 1f)?.let { it * it } ?: 0f
+    LaunchedEffect(targetStrain) {
+        strain.animateTo(targetStrain, if (targetStrain > 0f) StrainSpring else tween(2500))
+    }
+
+    // Idle life: the lids breathe and the pupil hunts slightly (hippus), always.
+    val life = rememberInfiniteTransition(label = "life")
+    val breath by life.animateFloat(
+        initialValue = -1f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(5300, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "breath",
+    )
+    val hippus by life.animateFloat(
+        initialValue = -1f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(3100, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "hippus",
+    )
+
     // Gaze motion. Keyed on the kind of motion, so target updates don't restart the loops and
     // leaving a state cancels its loop automatically.
     val motion = behavior.motion()
     LaunchedEffect(motion) {
         when (motion) {
             Motion.Wander -> while (true) {
-                val point = randomInDisk(0.35f)
+                // Mostly small wandering; now and then a curious look far off to one side.
+                val point = if (Random.nextFloat() < 0.15f) randomInDisk(0.75f, edgeBias = true) else randomInDisk(0.35f)
                 lookAt(point, SaccadeSpring)
                 val dwell = Random.nextInt(1500, 4000)
                 lookAt(point + randomInDisk(0.06f), tween(dwell, easing = LinearOutSlowInEasing))
@@ -139,24 +166,29 @@ fun LivingEye(
         }
     }
 
-    // Spontaneous blinks while calm. Frantic eyes don't blink.
+    suspend fun blinkOnce() {
+        blink.animateTo(1f, tween(70))
+        blink.animateTo(0f, tween(120))
+    }
+
+    // Spontaneous blinks while calm, sometimes a double blink. Frantic eyes don't blink.
     LaunchedEffect(motion) {
         if (motion == Motion.Frantic) return@LaunchedEffect
         while (true) {
             delay(Random.nextLong(3000, 7000))
-            val mirroring = (current as? EyeBehavior.Tracking)?.mirrorBlink == true
-            if (!mirroring && !relieving) {
-                blink.animateTo(1f, tween(70))
-                blink.animateTo(0f, tween(120))
+            if (relieving) continue
+            blinkOnce()
+            if (Random.nextFloat() < 0.15f) {
+                delay(90)
+                blinkOnce()
             }
         }
     }
 
-    // Mirror blink: when the watched person closes their eyes, so does the eye.
-    val mirrorBlink = (behavior as? EyeBehavior.Tracking)?.mirrorBlink == true
-    LaunchedEffect(mirrorBlink) {
-        if (mirrorBlink) blink.animateTo(1f, tween(70))
-        else if (blink.value > 0f) blink.animateTo(0f, tween(120))
+    // Mirror blink: the watched person blinked, so the eye blinks with them.
+    val initialBlinkKey = remember { blinkKey }
+    LaunchedEffect(blinkKey) {
+        if (blinkKey != initialBlinkKey && !relieving) blinkOnce()
     }
 
     // Relief: the first time it sees again after being blind. Skip the key we started with so a
@@ -179,9 +211,10 @@ fun LivingEye(
     // Animated values are read only in the draw phase, so motion never triggers recomposition.
     Canvas(modifier) {
         val expression = EyeExpression(
-            lidOpen = lid.value * (1f - blink.value),
+            lidOpen = (lid.value + 0.02f * breath).coerceIn(0f, 1f) * (1f - blink.value),
             squint = squint.value,
-            pupil = pupil.value,
+            pupil = (pupil.value + 0.025f * hippus).coerceIn(0f, 1f),
+            strain = strain.value,
         )
         with(renderer) { drawEye(Offset(gazeX.value, gazeY.value) + tremor, expression, style) }
     }
@@ -211,3 +244,4 @@ private val SaccadeSpring = spring<Float>(dampingRatio = 0.9f, stiffness = 900f)
 private val HoldSpring = spring<Float>(dampingRatio = 0.8f, stiffness = 500f)
 private val LidSpring = spring<Float>(dampingRatio = 0.9f, stiffness = 400f)
 private val PupilSpring = spring<Float>(dampingRatio = 1f, stiffness = 120f)
+private val StrainSpring = spring<Float>(dampingRatio = 1f, stiffness = 20f)

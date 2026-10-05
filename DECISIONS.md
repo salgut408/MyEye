@@ -63,3 +63,12 @@ Defaults chosen while building The Watcher that the original brief did not speci
 - **Overlay:** toggled by long-press (`combinedClickable` with no indication, so it's accessible and testable), and visible state is kept with `rememberSaveable`. Face boxes are drawn in normalized space as squares with half-size = `size` (the true box aspect isn't kept in `SeenFace`). The fake-source picker is shown only when `BuildConfig.DEBUG` (`buildConfig` feature enabled for this).
 - **Smoke test** replaces the template's instrumented example: it renders `WatcherScreen` from a fixed state, long-presses to show and hide the overlay, and checks that taps are forwarded.
 - **Found on device:** someone looking down at the phone gets eye-open probabilities < 0.3 continuously, so a held mirror blink keeps the eye shut. This is addressed in milestone 6.
+
+## Milestone 6: Polish
+
+- **Mirror blink is an event, not a held state.** The watcher emits a one-shot `mirrorBlinkStart` on the closing edge (eyes-open falls below 0.3 for the same tracked id). The ViewModel turns it into `blinkKey`, and the eye plays one 70/120 ms blink. On device, someone looking down at the phone is classified "closed" for seconds, which used to hold the eye shut. Now they get one blink.
+- **Mirror blink refractory period: 600 ms** (`WatcherConfig.mirrorBlinkRefractoryMs`), because ML Kit's FAST eye classification flickers around the threshold.
+- **Frantic escalation adds strain:** a bloodshot sclera (`EyeExpression.strain`, `EyeStyle.strainedSclera` `#F0B9AE`) that follows `intensity²`. It builds on a slow spring (k = 20) and fades over 2.5 s once it can see again. The saccade rate, reach, spring stiffness and tremor still escalate exactly as briefed.
+- **Idle life:** the lids "breathe" (±0.02 lidOpen, 5.3 s period) and the pupil hunts slightly (hippus, ±0.025, 3.1 s) in every state. 15% of idle saccades are curious long glances (reach 0.75, edge-biased), and 15% of spontaneous blinks are double blinks.
+- **Relief moment** is unchanged from milestone 2 (pupil to 0.35 + one slow 320/520 ms blink, then the tracking expression resumes). It was verified on device by denying and then granting the camera.
+- **Final merged manifest (debug and release):** `CAMERA` only, plus the app-private signature permission `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` (see milestone 5). No `INTERNET`, no `ACCESS_NETWORK_STATE`.

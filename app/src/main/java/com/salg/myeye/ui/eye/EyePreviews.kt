@@ -53,6 +53,10 @@ private fun LostPreview() = EyePreview(Offset(0.95f, 0f), EyeExpression.Lost)
 @Composable
 private fun FranticPreview() = EyePreview(Offset(-0.8f, -0.55f), EyeExpression.Frantic)
 
+@Preview(name = "Frantic, blind for a long time (strained)", widthDp = W, heightDp = H)
+@Composable
+private fun FranticStrainedPreview() = EyePreview(Offset(0.7f, 0.5f), EyeExpression.Frantic.copy(strain = 1f))
+
 @Preview(name = "Relief (mid slow blink)", widthDp = W, heightDp = H)
 @Composable
 private fun ReliefPreview() =

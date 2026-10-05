@@ -12,6 +12,8 @@ import com.salg.myeye.ui.theme.Void
 @Immutable
 data class EyeStyle(
     val sclera: Color = Sclera,
+    /** Sclera color at full [EyeExpression.strain]. */
+    val strainedSclera: Color = Color(0xFFF0B9AE),
     val outline: Color = Outline,
     val iris: Color = IrisTeal,
     val pupil: Color = Color.Black,

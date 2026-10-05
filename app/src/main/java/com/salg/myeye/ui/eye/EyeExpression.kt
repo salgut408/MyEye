@@ -8,12 +8,14 @@ import androidx.compose.runtime.Immutable
  * @param lidOpen 0 = closed, 1 = wide open.
  * @param squint 0 = relaxed, 1 = hard squint (upper lid lowers, lower lid rises).
  * @param pupil 0 = pinprick, 1 = fully dilated; mapped to 30–70% of the iris by the renderer.
+ * @param strain 0 = calm, 1 = exhausted from panic (the sclera turns bloodshot).
  */
 @Immutable
 data class EyeExpression(
     val lidOpen: Float,
     val squint: Float = 0f,
     val pupil: Float = 0.5f,
+    val strain: Float = 0f,
 ) {
     companion object {
         val Idle = EyeExpression(lidOpen = 0.8f, squint = 0f, pupil = 0.5f)

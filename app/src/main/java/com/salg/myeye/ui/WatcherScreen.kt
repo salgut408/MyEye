@@ -49,6 +49,7 @@ fun WatcherScreen(
         LivingEye(
             behavior = state.behavior,
             reliefKey = state.reliefKey,
+            blinkKey = state.blinkKey,
             modifier = Modifier.fillMaxSize(),
         )
         if (debugVisible) {

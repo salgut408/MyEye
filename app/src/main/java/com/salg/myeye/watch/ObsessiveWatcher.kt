@@ -28,8 +28,14 @@ data class WatcherState(
     val gaze: Gaze? = null,
     /** 0 = far … 1 = close, for the tracked face. */
     val closeness: Float = 0f,
-    /** The tracked person's eyes are closed. */
+    /** The tracked person's eyes are closed (level). */
     val mirrorBlink: Boolean = false,
+    /**
+     * One-shot: the tracked person just closed their eyes, so the eye blinks once with them.
+     * Fires on the closing edge only, so someone looking down at the phone (eyes classified
+     * as closed for a long time) gets one blink, not a shut eye.
+     */
+    val mirrorBlinkStart: Boolean = false,
     /** One-shot: true only on the update where the eye finds someone right after being blind. */
     val relief: Boolean = false,
     /** Latest camera frame, kept for the debug overlay. */
@@ -38,6 +44,7 @@ data class WatcherState(
     val darkSince: Long? = null,
     val blindSince: Long? = null,
     val regainedSightAt: Long? = null,
+    val lastMirrorBlinkAt: Long? = null,
 ) {
     val isFrantic get() = franticIntensity != null
     val targetId: Int?
@@ -96,7 +103,7 @@ class ObsessiveWatcher(private val config: WatcherConfig = WatcherConfig()) {
             else -> prev.watch
         }
 
-        state = derive(
+        val next = derive(
             prev.copy(
                 sight = sight,
                 watch = watch,
@@ -109,11 +116,21 @@ class ObsessiveWatcher(private val config: WatcherConfig = WatcherConfig()) {
             ),
             nowMs,
         )
+        val wasClosed = prev.mirrorBlink && prev.targetId == next.targetId
+        val rested = prev.lastMirrorBlinkAt?.let { nowMs - it >= config.mirrorBlinkRefractoryMs } ?: true
+        val blink = next.mirrorBlink && !wasClosed && rested
+        state = next.copy(
+            mirrorBlinkStart = blink,
+            lastMirrorBlinkAt = if (blink) nowMs else prev.lastMirrorBlinkAt,
+        )
         return state
     }
 
     fun onTick(nowMs: Long): WatcherState {
-        state = derive(state.copy(watch = timeout(state.watch, nowMs), relief = false), nowMs)
+        state = derive(
+            state.copy(watch = timeout(state.watch, nowMs), relief = false, mirrorBlinkStart = false),
+            nowMs,
+        )
         return state
     }
 

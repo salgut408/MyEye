@@ -74,6 +74,20 @@ class WatcherViewModelTest {
     }
 
     @Test
+    fun `each blink of the watched person bumps blinkKey once`() = runTest {
+        val vm = viewModel(source = SourceMode.Fake(FakeScenarios.Blinker))
+        vm.uiState.test {
+            advanceTimeBy(900)
+            assertEquals(0, expectMostRecentItem().blinkKey)
+            advanceTimeBy(1_000) // blink at 1.0–1.25 s
+            assertEquals(1, expectMostRecentItem().blinkKey)
+            advanceTimeBy(4_000) // blinks at 3.0 s and a long one at 5.0–5.7 s
+            assertEquals(3, expectMostRecentItem().blinkKey)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
     fun `denied permission is frantic and escalates over time`() = runTest {
         val vm = viewModel()
         vm.onCameraPermission(false)

@@ -30,6 +30,8 @@ data class WatcherConfig(
 
     /** Tracked face's eyes-open probability below which the eye blinks with them. */
     val mirrorBlinkBelow: Float = 0.3f,
+    /** Minimum time between mirrored blinks; ML Kit's eye classification flickers near the threshold. */
+    val mirrorBlinkRefractoryMs: Long = 600,
 
     /** Face sizes mapped to closeness 0 (far) … 1 (close); closeness dilates the pupil. */
     val farSize: Float = 0.12f,

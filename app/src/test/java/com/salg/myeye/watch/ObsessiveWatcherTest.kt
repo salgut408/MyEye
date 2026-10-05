@@ -173,9 +173,38 @@ class ObsessiveWatcherTest {
     }
 
     @Test
+    fun `mirror blink fires once when their eyes close, not for as long as they stay closed`() {
+        trackFace(face(1, eyesOpen = 0.9f))
+        assertFalse(frame(face(1, eyesOpen = 0.9f), stepMs = 33).mirrorBlinkStart)
+
+        assertTrue(frame(face(1, eyesOpen = 0.1f), stepMs = 33).mirrorBlinkStart)
+        // Looking down at the phone: classified closed for seconds. Still just the one blink.
+        val longClosed = (1..90).map { frame(face(1, eyesOpen = 0.1f), stepMs = 33) }
+        assertTrue(longClosed.none { it.mirrorBlinkStart })
+        assertTrue(longClosed.all { it.mirrorBlink })
+        assertFalse(watcher.onTick(now).mirrorBlinkStart)
+
+        // They open and blink again: another blink.
+        frame(face(1, eyesOpen = 0.9f), stepMs = 33)
+        assertTrue(frame(face(1, eyesOpen = 0.05f), stepMs = 33).mirrorBlinkStart)
+    }
+
+    @Test
+    fun `mirror blinks are rate-limited against flickering classification`() {
+        trackFace(face(1))
+        assertTrue(frame(face(1, eyesOpen = 0.1f), stepMs = 100).mirrorBlinkStart)
+        frame(face(1, eyesOpen = 0.9f), stepMs = 100)
+        assertFalse("within 600 ms", frame(face(1, eyesOpen = 0.1f), stepMs = 100).mirrorBlinkStart)
+        frame(face(1, eyesOpen = 0.9f), stepMs = 400)
+        assertTrue("after 600 ms", frame(face(1, eyesOpen = 0.1f)).mirrorBlinkStart)
+    }
+
+    @Test
     fun `mirror blink ignores a stranger closing their eyes`() {
         trackFace(face(1))
-        assertFalse(frame(face(1), face(2, eyesOpen = 0f)).mirrorBlink)
+        val s = frame(face(1), face(2, eyesOpen = 0f))
+        assertFalse(s.mirrorBlink)
+        assertFalse(s.mirrorBlinkStart)
     }
 
     // --- Sight ----------------------------------------------------------------------------------
