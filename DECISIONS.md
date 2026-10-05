@@ -23,3 +23,17 @@ Defaults chosen while building The Watcher that the original brief did not speci
 - **Relief** skips the `reliefKey` value present at first composition, so recreating the UI never replays an old relief.
 - **Immersive mode:** system bars are hidden (swipe to reveal transiently) with dark bar styling. The status bar icons were unreadable on the black stage.
 - **Touch normalization:** finger position is normalized to the screen's half-width/half-height, so a touch at a screen edge is full deflection.
+
+## Milestone 3: State machine
+
+- **`onTick(nowMs)` alongside `onPerception`.** After a single `NoPermission` nothing new arrives, yet panic must keep escalating and Lost must still time out. The ViewModel ticks the watcher; it stays pure (time is always passed in).
+- **The watcher keeps its current state internally** (`ObsessiveWatcher.state`), but every transition is a deterministic function of (previous state, input, `nowMs`).
+- **Going blind resets Watch to Idle.** When it sees again, it has to find someone, which is what drives the relief moment.
+- **Relief = the first acquisition that *starts* within `reliefWindowMs` (5 s) of regaining sight.** That acquisition uses 150 ms and emits `relief` once on reaching Tracking. If nobody shows up within 5 s, the next person gets the normal 400 ms with no relief. Re-acquiring during Lost goes straight to Tracking (per brief), with no relief.
+- **The initial Sight is SEEING (Idle),** so the app doesn't flash frantic during the ~hundreds of ms the camera takes to start. Granting permission later therefore counts as regaining sight and earns a relief moment.
+- **Acquiring → Idle when the candidate vanishes,** even if other faces are present; the next frame picks a new candidate. (Strictly per brief, and it costs only one frame.)
+- **Lost re-acquire picks the nearest face within 0.35,** not the first one found.
+- **At exactly 4000 ms Lost times out before re-acquire is considered** (`>=` boundaries throughout: 400 ms, 1000 ms, 4000 ms).
+- **Mirror blink uses a strict `< 0.3`,** and unknown eye-open (`null`) never blinks.
+- **Closeness:** face size 0.12 → 0 and 0.45 → 1 (clamped), configurable in `WatcherConfig`. Pupil = 0.4 + 0.25·closeness.
+- **`Clock`, `Gaze`, `SeenFace`, `Perception` live in `watch/`** so the pure layer has no dependency on `camera/` or Compose.
