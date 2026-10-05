@@ -33,19 +33,31 @@ Requires JDK 17+ and the Android SDK with API 37.
 
 ## How it works
 
+The app is split into Gradle modules, each with one job. Arrows only point downward:
+
+```
+:app           the Activity, ViewModel, screen, debug overlay and permission flow
+ ├─► :feature:eye   the eye: geometry, Canvas renderer, animation
+ ├─► :core:camera   CameraX + ML Kit, and scripted fake sources
+ ├─► :core:ui       the shared dark theme
+ └─► :core:watch    the personality: a pure Kotlin state machine (no Android)
+```
+
+Shared build settings live in convention plugins under `build-logic/`.
+
 ```
 FaceSource ──► WatcherViewModel ──► StateFlow<EyeUiState> ──► LivingEye (Compose Canvas)
  ├─ CameraFaceSource   owns ObsessiveWatcher (pure Kotlin),
  └─ FakeFaceSource     a 100 ms tick and an injected Clock
 ```
 
-- `camera/`: CameraX `ImageAnalysis` (front, ~640×480, keep-only-latest) and ML Kit face detection (bundled model, fast, with tracking and eye classification). It emits `Perception`s: faces in normalized, mirrored coordinates plus the frame's mean luma.
-- `watch/`: the personality, a pure state machine with time passed in. **Sight** (seeing / dark / no permission / camera error), **Watch** (Idle → Acquiring → Tracking → Lost) and **Alertness** (awake / drowsy / asleep).
-- `ui/eye/`: the eye. Geometry is pure math; `CartoonEyeRenderer` draws it as a pure function of gaze, expression and style; `LivingEye` animates it.
+- `:core:camera`: CameraX `ImageAnalysis` (front, ~640×480, keep-only-latest) and ML Kit face detection (bundled model, fast, with tracking and eye classification). It emits `Perception`s: faces in normalized, mirrored coordinates plus the frame's mean luma.
+- `:core:watch`: the personality, a pure state machine with time passed in. **Sight** (seeing / dark / no permission / camera error), **Watch** (Idle → Acquiring → Tracking → Lost) and **Alertness** (awake / drowsy / asleep).
+- `:feature:eye`: the eye. Geometry is pure math; `CartoonEyeRenderer` draws it as a pure function of gaze, expression and style; `LivingEye` animates it.
 
 ## Tuning
 
-Every threshold of the personality is in [`WatcherConfig`](app/src/main/java/com/salg/myeye/watch/WatcherConfig.kt). Change the defaults there, or pass a config to `WatcherViewModel`. Use the debug overlay (long-press) to see the numbers live.
+Every threshold of the personality is in [`WatcherConfig`](core/watch/src/main/kotlin/com/salg/myeye/watch/WatcherConfig.kt). Change the defaults there, or pass a config to `WatcherViewModel`. Use the debug overlay (long-press) to see the numbers live.
 
 | Field | Default | Raise it to… | Lower it to… |
 |---|---|---|---|
