@@ -31,6 +31,7 @@ dependencies {
     implementation(project(":core:camera"))
     implementation(project(":core:ui"))
     implementation(project(":core:watch"))
+    implementation(project(":feature:eye"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

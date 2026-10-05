@@ -28,4 +28,5 @@ include(":app")
 include(":core:camera")
 include(":core:ui")
 include(":core:watch")
+include(":feature:eye")
  
