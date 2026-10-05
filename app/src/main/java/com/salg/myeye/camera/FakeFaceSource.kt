@@ -4,6 +4,7 @@ import com.salg.myeye.watch.Perception
 import com.salg.myeye.watch.SeenFace
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flow
 import kotlin.math.PI
 import kotlin.math.abs
@@ -14,14 +15,16 @@ class FakeFaceSource(
     private val scenario: FakeScenario,
     private val frameIntervalMs: Long = 66, // ≈ 15 fps, like low-res ImageAnalysis on a mid phone
 ) : FaceSource {
-    override fun perceptions(): Flow<Perception> = flow {
+    override fun perceptions(lowPower: StateFlow<Boolean>): Flow<Perception> = flow {
         var elapsed = 0L
         while (true) {
             val loop = (elapsed / scenario.durationMs).toInt()
             val scene = scenario.sceneAt(elapsed % scenario.durationMs, loop)
             emit(Perception.Frame(scene.faces, scene.luma, elapsed))
-            delay(frameIntervalMs)
-            elapsed += frameIntervalMs
+            // Asleep: only ~1 frame per second, like the camera source. Scenario time keeps flowing.
+            val interval = if (lowPower.value) FaceSource.LOW_POWER_INTERVAL_MS else frameIntervalMs
+            delay(interval)
+            elapsed += interval
         }
     }
 }
@@ -104,7 +107,24 @@ object FakeScenarios {
         FakeScene(listOf(person(loop * 10 + 1, 0.2f + sway(t, 4_000, 0.1f), eyesOpen = if (closed) 0.05f else 0.95f)))
     }
 
+    /** An empty room: drowsy at 45 s, asleep at 60 s, then someone walks in and startles it. */
+    val NobodyHome = FakeScenario("Nobody home (sleeps, then startled)", 85_000) { t, loop ->
+        FakeScene(if (t < 75_000) emptyList() else listOf(person(loop * 10 + 1, sway(t, 3_000, 0.2f))))
+    }
+
+    /** The lens stays covered: panic, then exhausted sleep; uncovered, a face startles it awake. */
+    val CoveredForLong = FakeScenario("Covered for a long time (exhausted)", 92_000) { t, loop ->
+        when {
+            t < 2_000 -> FakeScene(listOf(person(loop * 10 + 1, 0f)))
+            t < 82_000 -> FakeScene(emptyList(), luma = 5)
+            else -> FakeScene(listOf(person(loop * 10 + 2, sway(t, 2_500, 0.2f))))
+        }
+    }
+
     val all = listOf(WalkAcross, StrangerStepsCloser, LeavesAndReturns, LightsOff, Blinker)
+
+    /** Slow scenarios for sleep; kept out of [Tour] because each takes well over a minute. */
+    val sleepy = listOf(NobodyHome, CoveredForLong)
 
     /** Every scenario back to back, so the eye can be watched going through all of its moods. */
     val Tour: FakeScenario = run {

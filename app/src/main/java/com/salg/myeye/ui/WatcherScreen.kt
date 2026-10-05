@@ -50,6 +50,7 @@ fun WatcherScreen(
             behavior = state.behavior,
             reliefKey = state.reliefKey,
             blinkKey = state.blinkKey,
+            wakeKey = state.wakeKey,
             modifier = Modifier.fillMaxSize(),
         )
         if (debugVisible) {

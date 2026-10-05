@@ -76,4 +76,38 @@ class EyeGeometryTest {
         assertTrue(g.upperLidY < g.center.y - g.radiusY)
         assertTrue(g.lowerLidY > g.center.y + g.radiusY)
     }
+
+    @Test
+    fun `no Zs while awake`() {
+        assertTrue(zzzGlyphs(geo(), sleep = 0f, phase = 0.4f).isEmpty())
+    }
+
+    @Test
+    fun `three Zs float above the upper right of the sclera, wherever the eye looks`() {
+        val a = zzzGlyphs(geo(gaze = Offset.Zero), sleep = 1f, phase = 0.3f)
+        val b = zzzGlyphs(geo(gaze = Offset(-1f, 1f)), sleep = 1f, phase = 0.3f)
+        assertEquals(3, a.size)
+        assertEquals(a, b)
+        val g = geo()
+        assertTrue(a.all { it.center.x > g.center.x && it.center.y < g.center.y - 0.5f * g.radiusY })
+    }
+
+    @Test
+    fun `a Z rises, grows and fades in then out over its cycle`() {
+        val g = geo()
+        val early = zzzGlyphs(g, 1f, phase = 0.1f).first()
+        val mid = zzzGlyphs(g, 1f, phase = 0.5f).first()
+        val late = zzzGlyphs(g, 1f, phase = 0.9f).first()
+        assertTrue(mid.center.y < early.center.y && late.center.y < mid.center.y)
+        assertTrue(late.size > early.size)
+        assertTrue(mid.alpha > early.alpha && mid.alpha > late.alpha)
+        assertEquals(0f, zzzGlyphs(g, 1f, phase = 0f).first().alpha, 0.0001f)
+    }
+
+    @Test
+    fun `Z opacity scales with how asleep it is`() {
+        val half = zzzGlyphs(geo(), sleep = 0.5f, phase = 0.5f).first().alpha
+        val full = zzzGlyphs(geo(), sleep = 1f, phase = 0.5f).first().alpha
+        assertEquals(full / 2f, half, 0.0001f)
+    }
 }

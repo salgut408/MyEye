@@ -3,6 +3,7 @@ package com.salg.myeye.ui.eye
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -38,6 +39,7 @@ import kotlin.random.Random
  *
  * @param reliefKey bump this to play the one-shot relief moment (slow blink + pupil constriction).
  * @param blinkKey bump this to blink once (mirroring the watched person's blink).
+ * @param wakeKey bump this to play the startle of being woken up.
  */
 @Composable
 fun LivingEye(
@@ -45,6 +47,7 @@ fun LivingEye(
     modifier: Modifier = Modifier,
     reliefKey: Int = 0,
     blinkKey: Int = 0,
+    wakeKey: Int = 0,
     style: EyeStyle = EyeStyle(),
     renderer: EyeRenderer = CartoonEyeRenderer,
 ) {
@@ -55,8 +58,10 @@ fun LivingEye(
     val pupil = remember { Animatable(EyeExpression.Idle.pupil) }
     val blink = remember { Animatable(0f) } // 1 = fully closed, multiplied over lidOpen
     val strain = remember { Animatable(0f) }
+    val zzz = remember { Animatable(0f) } // opacity of the sleeping Zs
     var tremor by remember { mutableStateOf(Offset.Zero) }
-    var relieving by remember { mutableStateOf(false) }
+    // True while a one-shot moment (relief, startle) owns the lids and pupil.
+    var oneShot by remember { mutableStateOf(false) }
     val current by rememberUpdatedState(behavior)
 
     suspend fun lookAt(target: Offset, spec: AnimationSpec<Float>) = coroutineScope {
@@ -64,11 +69,13 @@ fun LivingEye(
         launch { gazeY.animateTo(target.y, spec) }
     }
 
-    // Resting expression for the current behavior. Paused while the relief moment owns the face.
+    // Resting expression for the current behavior. Paused while a one-shot moment owns the face.
     val resting = behavior.expression()
-    LaunchedEffect(resting, relieving) {
-        if (relieving) return@LaunchedEffect
-        launch { lid.animateTo(resting.lidOpen, LidSpring) }
+    val asleep = behavior == EyeBehavior.Asleep
+    LaunchedEffect(resting, oneShot) {
+        if (oneShot) return@LaunchedEffect
+        // Falling asleep is a slow, heavy close; everything else is a quick spring.
+        launch { lid.animateTo(resting.lidOpen, if (asleep) FallAsleepTween else LidSpring) }
         launch { squint.animateTo(resting.squint, LidSpring) }
         launch { pupil.animateTo(resting.pupil, PupilSpring) }
     }
@@ -77,6 +84,11 @@ fun LivingEye(
     val targetStrain = (behavior as? EyeBehavior.Frantic)?.intensity?.coerceIn(0f, 1f)?.let { it * it } ?: 0f
     LaunchedEffect(targetStrain) {
         strain.animateTo(targetStrain, if (targetStrain > 0f) StrainSpring else tween(2500))
+    }
+
+    // Asleep: the Zs fade in slowly, and vanish at once when it wakes.
+    LaunchedEffect(asleep) {
+        zzz.animateTo(if (asleep) 1f else 0f, tween(if (asleep) 1500 else 150))
     }
 
     // Idle life: the lids breathe and the pupil hunts slightly (hippus), always.
@@ -90,6 +102,11 @@ fun LivingEye(
         initialValue = -1f, targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(3100, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label = "hippus",
+    )
+    val zPhase by life.animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(4200, easing = LinearEasing)),
+        label = "zPhase",
     )
 
     // Gaze motion. Keyed on the kind of motion, so target updates don't restart the loops and
@@ -138,6 +155,16 @@ fun LivingEye(
                 }
             }
 
+            // Sleepy: the gaze sinks and drifts slowly, heavier the closer it is to sleep.
+            Motion.Doze -> while (true) {
+                val droop = (current as? EyeBehavior.Drowsy)?.droop ?: 1f
+                val point = Offset(Random.nextFloat() * 0.3f - 0.15f, 0.15f + 0.35f * droop)
+                lookAt(point, tween(Random.nextInt(2500, 4000), easing = FastOutSlowInEasing))
+            }
+
+            // Asleep: the eyeball rolls down a little and rests.
+            Motion.Sleep -> lookAt(Offset(0f, 0.3f), tween(1800, easing = FastOutSlowInEasing))
+
             Motion.Frantic -> coroutineScope {
                 val tremorJob = launch {
                     try {
@@ -171,16 +198,26 @@ fun LivingEye(
         blink.animateTo(0f, tween(120))
     }
 
-    // Spontaneous blinks while calm, sometimes a double blink. Frantic eyes don't blink.
+    // Spontaneous blinks while calm, sometimes a double blink; slow, heavy ones when drowsy.
+    // Frantic eyes don't blink, and closed ones can't.
     LaunchedEffect(motion) {
-        if (motion == Motion.Frantic) return@LaunchedEffect
-        while (true) {
-            delay(Random.nextLong(3000, 7000))
-            if (relieving) continue
-            blinkOnce()
-            if (Random.nextFloat() < 0.15f) {
-                delay(90)
+        when (motion) {
+            Motion.Frantic, Motion.Sleep -> return@LaunchedEffect
+            Motion.Doze -> while (true) {
+                delay(Random.nextLong(2000, 4000))
+                if (oneShot) continue
+                blink.animateTo(1f, tween(260, easing = FastOutSlowInEasing))
+                delay(Random.nextLong(100, 400))
+                blink.animateTo(0f, tween(450, easing = FastOutSlowInEasing))
+            }
+            else -> while (true) {
+                delay(Random.nextLong(3000, 7000))
+                if (oneShot) continue
                 blinkOnce()
+                if (Random.nextFloat() < 0.15f) {
+                    delay(90)
+                    blinkOnce()
+                }
             }
         }
     }
@@ -188,7 +225,33 @@ fun LivingEye(
     // Mirror blink: the watched person blinked, so the eye blinks with them.
     val initialBlinkKey = remember { blinkKey }
     LaunchedEffect(blinkKey) {
-        if (blinkKey != initialBlinkKey && !relieving) blinkOnce()
+        if (blinkKey != initialBlinkKey && !oneShot) blinkOnce()
+    }
+
+    // Startle: woken up by a face. Lids fly open past wide, the pupil snaps small, a jolt.
+    val initialWakeKey = remember { wakeKey }
+    LaunchedEffect(wakeKey) {
+        if (wakeKey == initialWakeKey) return@LaunchedEffect
+        oneShot = true
+        try {
+            blink.snapTo(0f)
+            launch { lid.animateTo(1f, StartleSpring) }
+            launch { pupil.animateTo(EyeExpression.STARTLE_PUPIL, tween(120)) }
+            val jolt = launch {
+                try {
+                    val until = withFrameNanos { it } + 300_000_000L
+                    while (withFrameNanos { it } < until) {
+                        tremor = Offset(Random.nextFloat() * 0.06f - 0.03f, Random.nextFloat() * 0.06f - 0.03f)
+                    }
+                } finally {
+                    tremor = Offset.Zero
+                }
+            }
+            delay(700)
+            jolt.cancel()
+        } finally {
+            oneShot = false
+        }
     }
 
     // Relief: the first time it sees again after being blind. Skip the key we started with so a
@@ -196,7 +259,7 @@ fun LivingEye(
     val initialReliefKey = remember { reliefKey }
     LaunchedEffect(reliefKey) {
         if (reliefKey == initialReliefKey) return@LaunchedEffect
-        relieving = true
+        oneShot = true
         try {
             launch { pupil.animateTo(EyeExpression.RELIEF_PUPIL, tween(350)) }
             blink.animateTo(1f, tween(320, easing = FastOutSlowInEasing))
@@ -204,29 +267,34 @@ fun LivingEye(
             blink.animateTo(0f, tween(520, easing = FastOutSlowInEasing))
             delay(600)
         } finally {
-            relieving = false
+            oneShot = false
         }
     }
 
     // Animated values are read only in the draw phase, so motion never triggers recomposition.
     Canvas(modifier) {
         val expression = EyeExpression(
-            lidOpen = (lid.value + 0.02f * breath).coerceIn(0f, 1f) * (1f - blink.value),
+            // Breathing never cracks a sleeping eye open.
+            lidOpen = (lid.value + 0.02f * breath * (1f - zzz.value)).coerceIn(0f, 1f) * (1f - blink.value),
             squint = squint.value,
             pupil = (pupil.value + 0.025f * hippus).coerceIn(0f, 1f),
             strain = strain.value,
+            sleep = zzz.value,
+            zPhase = zPhase,
         )
         with(renderer) { drawEye(Offset(gazeX.value, gazeY.value) + tremor, expression, style) }
     }
 }
 
-private enum class Motion { Wander, Follow, Search, Frantic }
+private enum class Motion { Wander, Follow, Search, Frantic, Doze, Sleep }
 
 private fun EyeBehavior.motion() = when (this) {
     EyeBehavior.Idle -> Motion.Wander
     is EyeBehavior.Acquiring, is EyeBehavior.Tracking -> Motion.Follow
     is EyeBehavior.Lost -> Motion.Search
     is EyeBehavior.Frantic -> Motion.Frantic
+    is EyeBehavior.Drowsy -> Motion.Doze
+    EyeBehavior.Asleep -> Motion.Sleep
 }
 
 private fun franticIntensity(b: EyeBehavior) = ((b as? EyeBehavior.Frantic)?.intensity ?: 1f).coerceIn(0f, 1f)
@@ -245,3 +313,5 @@ private val HoldSpring = spring<Float>(dampingRatio = 0.8f, stiffness = 500f)
 private val LidSpring = spring<Float>(dampingRatio = 0.9f, stiffness = 400f)
 private val PupilSpring = spring<Float>(dampingRatio = 1f, stiffness = 120f)
 private val StrainSpring = spring<Float>(dampingRatio = 1f, stiffness = 20f)
+private val StartleSpring = spring<Float>(dampingRatio = 0.4f, stiffness = 1500f)
+private val FallAsleepTween = tween<Float>(1800, easing = FastOutSlowInEasing)

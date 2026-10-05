@@ -2,6 +2,7 @@ package com.salg.myeye.ui.eye
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.util.lerp
 
 /**
  * What the eye should be doing right now, in UI terms. Gaze targets are normalized:
@@ -20,6 +21,11 @@ sealed interface EyeBehavior {
 
     /** @param intensity 0 = just went blind, 1 = blind for a long time. */
     data class Frantic(val intensity: Float) : EyeBehavior
+
+    /** @param droop 0 = just getting sleepy … 1 = about to fall asleep. */
+    data class Drowsy(val droop: Float) : EyeBehavior
+
+    data object Asleep : EyeBehavior
 }
 
 /** Resting expression for a behavior, before blinks and the relief moment are layered on. */
@@ -31,4 +37,9 @@ fun EyeBehavior.expression(): EyeExpression = when (this) {
     )
     is EyeBehavior.Lost -> EyeExpression.Lost
     is EyeBehavior.Frantic -> EyeExpression.Frantic
+    is EyeBehavior.Drowsy -> EyeExpression.Idle.copy(
+        lidOpen = lerp(EyeExpression.Idle.lidOpen, 0.2f, droop.coerceIn(0f, 1f)),
+        pupil = 0.55f,
+    )
+    EyeBehavior.Asleep -> EyeExpression.Asleep
 }

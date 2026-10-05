@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.lerp
 
 /**
@@ -74,6 +75,18 @@ object CartoonEyeRenderer : EyeRenderer {
         clipPath(oval) {
             drawPath(upperLid, style.outline, style = outline)
             drawPath(lowerLid, style.outline, style = outline)
+        }
+
+        val zStroke = Stroke(geo.outlineWidth * 0.7f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        zzzGlyphs(geo, expression.sleep, expression.zPhase).forEach { z ->
+            val h = z.size / 2f
+            val glyph = Path().apply {
+                moveTo(z.center.x - h, z.center.y - h)
+                lineTo(z.center.x + h, z.center.y - h)
+                lineTo(z.center.x - h, z.center.y + h)
+                lineTo(z.center.x + h, z.center.y + h)
+            }
+            drawPath(glyph, style.sclera.copy(alpha = z.alpha), style = zStroke)
         }
     }
 

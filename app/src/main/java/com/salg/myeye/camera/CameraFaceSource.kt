@@ -26,6 +26,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.ProducerScope
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import java.util.concurrent.Executor
 import java.util.concurrent.ExecutorService
@@ -41,7 +42,7 @@ import java.util.concurrent.Executors
  */
 class CameraFaceSource(private val context: Context) : FaceSource {
 
-    override fun perceptions(): Flow<Perception> = callbackFlow {
+    override fun perceptions(lowPower: StateFlow<Boolean>): Flow<Perception> = callbackFlow {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             send(Perception.NoPermission)
             awaitClose()
@@ -70,7 +71,17 @@ class CameraFaceSource(private val context: Context) : FaceSource {
             )
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .build()
-        analysis.setAnalyzer(executor) { image -> analyze(image, detector) }
+        var lastAnalyzedMs = Long.MIN_VALUE // only touched on the analysis thread
+        analysis.setAnalyzer(executor) { image ->
+            val timestampMs = image.imageInfo.timestamp / 1_000_000
+            if (lowPower.value && timestampMs - lastAnalyzedMs < FaceSource.LOW_POWER_INTERVAL_MS) {
+                // Asleep: drop the frame before any work (luma, ML Kit), the main battery cost.
+                image.close()
+            } else {
+                lastAnalyzedMs = timestampMs
+                analyze(image, detector)
+            }
+        }
 
         var provider: ProcessCameraProvider? = null
         try {

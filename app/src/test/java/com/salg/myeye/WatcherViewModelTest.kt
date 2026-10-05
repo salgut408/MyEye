@@ -12,6 +12,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -23,6 +25,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -42,7 +45,7 @@ class WatcherViewModelTest {
     ) = WatcherViewModel(camera, Clock { testScheduler.currentTime }, initialSource = source)
 
     /** A camera that sees one face at ~30 fps. */
-    private val cameraWithAFace = FaceSource {
+    private val cameraWithAFace = FaceSource { _ ->
         flow {
             while (true) {
                 emit(Perception.Frame(listOf(SeenFace(1, 0.3f, 0f, 0.2f, 0.9f)), 120, 0))
@@ -125,7 +128,7 @@ class WatcherViewModelTest {
     @Test
     fun `the camera only runs while someone collects the UI state`() = runTest {
         var activeCameras = 0
-        val camera = FaceSource {
+        val camera = FaceSource { _ ->
             flow<Perception> {
                 activeCameras++
                 try {
@@ -160,6 +163,54 @@ class WatcherViewModelTest {
             // Same face id on return: still the same person, no fresh 400 ms acquisition.
             advanceTimeBy(50)
             assertTrue(expectMostRecentItem().behavior is EyeBehavior.Tracking)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `asleep, the source is told to save power, and a face wakes it to full speed`() = runTest {
+        var lowPower: StateFlow<Boolean>? = null
+        val someoneThere = MutableStateFlow(false)
+        val camera = FaceSource { lp ->
+            lowPower = lp
+            flow {
+                while (true) {
+                    val faces = if (someoneThere.value) listOf(SeenFace(1, 0f, 0f, 0.2f, 0.9f)) else emptyList()
+                    emit(Perception.Frame(faces, 120, 0))
+                    delay(100)
+                }
+            }
+        }
+        val vm = viewModel(camera = camera)
+        vm.onCameraPermission(true)
+        vm.uiState.test {
+            advanceTimeBy(50_000)
+            assertTrue(expectMostRecentItem().behavior is EyeBehavior.Drowsy)
+            assertFalse(lowPower!!.value)
+
+            advanceTimeBy(11_000)
+            val asleep = expectMostRecentItem()
+            assertEquals(EyeBehavior.Asleep, asleep.behavior)
+            assertTrue(lowPower!!.value)
+
+            someoneThere.value = true
+            advanceTimeBy(300)
+            val awake = expectMostRecentItem()
+            assertEquals(1, awake.wakeKey)
+            assertFalse(lowPower!!.value)
+            assertTrue(awake.behavior is EyeBehavior.Acquiring || awake.behavior is EyeBehavior.Tracking)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `sleepNow puts the eye to sleep and lowers the power`() = runTest {
+        val vm = viewModel(source = SourceMode.Fake(FakeScenarios.WalkAcross))
+        vm.uiState.test {
+            advanceTimeBy(6_500) // the walker has left; the room is empty until 9 s
+            vm.sleepNow()
+            advanceTimeBy(150)
+            assertEquals(EyeBehavior.Asleep, expectMostRecentItem().behavior)
             cancelAndIgnoreRemainingEvents()
         }
     }

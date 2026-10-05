@@ -1,13 +1,19 @@
 package com.salg.myeye.camera
 
+import com.salg.myeye.watch.Alertness
 import com.salg.myeye.watch.ObsessiveWatcher
 import com.salg.myeye.watch.Perception
 import com.salg.myeye.watch.Sight
+import com.salg.myeye.watch.SleepReason
 import com.salg.myeye.watch.Watch
 import com.salg.myeye.watch.WatcherState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.test.runTest
 import org.junit.Test
 
 /** Each scripted scenario must actually provoke the behavior it is named after. */
@@ -91,5 +97,35 @@ class FakeScenariosTest {
         val ids = (0 until tour.durationMs step 500).flatMap { t -> tour.sceneAt(t, 0).faces.map { it.id } }.toSet()
         val perScenario = FakeScenarios.all.indices.map { i -> ids.filter { it / 10 == i } }
         assertTrue("every scenario contributes its own ids", perScenario.all { it.isNotEmpty() })
+    }
+
+    @Test
+    fun `nobody home - drowsy, asleep, then startled awake by the visitor`() {
+        val r = replay(FakeScenarios.NobodyHome)
+        assertEquals(Alertness.AWAKE, r.at(40_000).alertness)
+        assertEquals(Alertness.DROWSY, r.at(50_000).alertness)
+        assertTrue(r.at(61_000).isAsleep)
+        assertEquals(1, r.between(74_000, 84_000).count { it.wake })
+        assertTrue(r.at(76_000).watch is Watch.Tracking)
+    }
+
+    @Test
+    fun `covered for long - panic, exhausted sleep, startle not relief`() {
+        val r = replay(FakeScenarios.CoveredForLong)
+        assertTrue(r.at(30_000).isFrantic)
+        assertEquals(SleepReason.EXHAUSTED, r.at(75_000).sleepReason)
+        assertFalse(r.at(75_000).isFrantic)
+        val after = r.between(81_000, 91_000)
+        assertEquals(1, after.count { it.wake })
+        assertTrue(after.none { it.relief })
+    }
+
+    @Test
+    fun `fake source slows to one frame per second while in low power`() = runTest {
+        val source = FakeFaceSource(FakeScenarios.WalkAcross)
+        val normal = source.perceptions(MutableStateFlow(false)).take(3).toList()
+        assertEquals(listOf(0L, 66L, 132L), normal.map { (it as Perception.Frame).timestampMs })
+        val asleep = source.perceptions(MutableStateFlow(true)).take(3).toList()
+        assertEquals(listOf(0L, 1_000L, 2_000L), asleep.map { (it as Perception.Frame).timestampMs })
     }
 }

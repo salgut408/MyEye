@@ -10,6 +10,7 @@ import com.salg.myeye.camera.FaceSource
 import com.salg.myeye.camera.FakeFaceSource
 import com.salg.myeye.camera.FakeScenario
 import com.salg.myeye.ui.eye.EyeBehavior
+import com.salg.myeye.watch.Alertness
 import com.salg.myeye.watch.Clock
 import com.salg.myeye.watch.Gaze
 import com.salg.myeye.watch.ObsessiveWatcher
@@ -42,6 +43,8 @@ data class EyeUiState(
     val reliefKey: Int = 0,
     /** Increments each time the watched person blinks; the eye blinks with them. */
     val blinkKey: Int = 0,
+    /** Increments each time a face startles the eye awake. */
+    val wakeKey: Int = 0,
     /** Full watcher state, for the debug overlay. */
     val watcher: WatcherState = WatcherState(),
     val analysisFps: Float = 0f,
@@ -69,6 +72,9 @@ class WatcherViewModel(
     private val source = MutableStateFlow(initialSource)
     private var reliefKey = 0
     private var blinkKey = 0
+    private var wakeKey = 0
+    /** True while the eye sleeps: the source perceives at ~1 fps to save battery. */
+    private val lowPower = MutableStateFlow(false)
     private val fps = FpsMeter()
 
     fun onCameraPermission(granted: Boolean) {
@@ -79,11 +85,18 @@ class WatcherViewModel(
         source.value = mode
     }
 
+    /** Debug: fall asleep right now instead of waiting for an empty room. */
+    fun sleepNow() {
+        lowPower.value = watcher.sleepNow(clock.nowMs()).isAsleep
+    }
+
     val uiState: StateFlow<EyeUiState> = channelFlow {
         suspend fun publish(s: WatcherState) {
             if (s.relief) reliefKey++
             if (s.mirrorBlinkStart) blinkKey++
-            send(EyeUiState(s.toBehavior(), reliefKey, blinkKey, s, fps.value, source.value))
+            if (s.wake) wakeKey++
+            lowPower.value = s.isAsleep
+            send(EyeUiState(s.toBehavior(), reliefKey, blinkKey, wakeKey, s, fps.value, source.value))
         }
         launch {
             while (true) {
@@ -105,12 +118,12 @@ class WatcherViewModel(
 
     private fun perceptions(): Flow<Perception> = source.flatMapLatest { mode ->
         when (mode) {
-            is SourceMode.Fake -> fakeSource(mode.scenario).perceptions()
+            is SourceMode.Fake -> fakeSource(mode.scenario).perceptions(lowPower)
             SourceMode.Camera -> cameraPermission.flatMapLatest { granted ->
                 when (granted) {
                     null -> emptyFlow()
                     false -> flowOf(Perception.NoPermission)
-                    true -> cameraSource.perceptions()
+                    true -> cameraSource.perceptions(lowPower)
                 }
             }
         }
@@ -132,7 +145,9 @@ class WatcherViewModel(
 }
 
 fun WatcherState.toBehavior(): EyeBehavior {
+    if (isAsleep) return EyeBehavior.Asleep // sleep overrides even panic
     franticIntensity?.let { return EyeBehavior.Frantic(it) }
+    if (alertness == Alertness.DROWSY && watch == Watch.Idle) return EyeBehavior.Drowsy(drowsiness)
     val target = gaze?.toOffset() ?: Offset.Zero
     return when (watch) {
         Watch.Idle -> EyeBehavior.Idle

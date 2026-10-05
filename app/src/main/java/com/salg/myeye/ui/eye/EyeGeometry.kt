@@ -4,8 +4,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.center
 import androidx.compose.ui.util.lerp
+import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.min
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -41,6 +43,30 @@ data class EyeGeometry(
 
     companion object {
         const val CORNER_OVERSHOOT = 1.05f
+    }
+}
+
+/** One floating "Z" of the sleeping eye, in canvas pixels. */
+data class ZGlyph(val center: Offset, val size: Float, val alpha: Float)
+
+/**
+ * The three Zs drifting up from the sleeping eye's upper right. Anchored to the sclera (never the
+ * iris), staggered a third of a cycle apart, each growing as it rises and fading in and out.
+ * Empty when [sleep] is 0.
+ */
+fun zzzGlyphs(geo: EyeGeometry, sleep: Float, phase: Float): List<ZGlyph> {
+    if (sleep <= 0f) return emptyList()
+    return (0 until 3).map { i ->
+        val p = (phase + i / 3f) % 1f
+        val sway = sin(p * 2f * PI.toFloat()) * 0.08f * geo.radiusX
+        ZGlyph(
+            center = Offset(
+                geo.center.x + lerp(0.55f, 0.9f, p) * geo.radiusX + sway,
+                geo.center.y - lerp(0.75f, 2.1f, p) * geo.radiusY,
+            ),
+            size = lerp(0.12f, 0.3f, p) * geo.radiusX,
+            alpha = sleep.coerceIn(0f, 1f) * sin(p * PI.toFloat()),
+        )
     }
 }
 

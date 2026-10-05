@@ -62,6 +62,19 @@ private fun FranticStrainedPreview() = EyePreview(Offset(0.7f, 0.5f), EyeExpress
 private fun ReliefPreview() =
     EyePreview(Offset.Zero, EyeExpression.Tracking.copy(lidOpen = 0.3f, pupil = EyeExpression.RELIEF_PUPIL))
 
+@Preview(name = "Drowsy (halfway to sleep)", widthDp = W, heightDp = H)
+@Composable
+private fun DrowsyPreview() = EyePreview(Offset(0f, 0.35f), EyeBehavior.Drowsy(droop = 0.5f).expression())
+
+@Preview(name = "Asleep (Z z z)", widthDp = W, heightDp = H)
+@Composable
+private fun AsleepPreview() = EyePreview(Offset(0f, 0.3f), EyeExpression.Asleep.copy(sleep = 1f, zPhase = 0.2f))
+
+@Preview(name = "Startled awake", widthDp = W, heightDp = H)
+@Composable
+private fun StartledPreview() =
+    EyePreview(Offset(-0.2f, -0.1f), EyeExpression.Frantic.copy(pupil = EyeExpression.STARTLE_PUPIL))
+
 @Preview(name = "Mirror blink (closed)", widthDp = W, heightDp = H)
 @Composable
 private fun BlinkPreview() = EyePreview(Offset(0.2f, 0f), EyeExpression.Tracking.copy(lidOpen = 0f))
