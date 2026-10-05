@@ -40,7 +40,7 @@ Run these from the repo root with the Gradle wrapper:
 ## Build setup notes
 
 - **AGP 9.x with built-in Kotlin.** Only `com.android.application` and `org.jetbrains.kotlin.plugin.compose` are applied. Don't add `org.jetbrains.kotlin.android`, because AGP 9 supplies Kotlin support itself.
-- `compileSdk` uses the new AGP DSL (`compileSdk { version = release(37) }`). `minSdk` is 31, compile/target SDK is 37, and Java/JVM target is 11. AGP 9.4 needs Gradle ≥ 9.6 (the wrapper is on 9.8.0).
+- `compileSdk` uses the new AGP DSL (`compileSdk { version = release(37) }`). `minSdk` is 31, compile/target SDK is 37, and Java/JVM target is 11. **AGP is pinned to 9.2.1 to match the installed Android Studio (2025.3.4).** Studio won't sync a project with a newer AGP than it bundles, even though `./gradlew` builds fine, so don't bump AGP unless Studio is updated first. The Gradle wrapper is on 9.8.0.
 - Declare every dependency and plugin version in `gradle/libs.versions.toml` and reference it through `libs.*` aliases. Compose library versions come from the Compose BOM, so Compose entries in the catalog have no version.
 - `settings.gradle.kts` sets `RepositoriesMode.FAIL_ON_PROJECT_REPOS`, so repositories can only be declared there, never in module build files.
 - The Compose theme lives in `ui/theme/` (`MyEyeTheme`, always dark, no dynamic color). Wrap new screens and `@Preview`s in `MyEyeTheme`.

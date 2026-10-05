@@ -4,7 +4,7 @@ Defaults chosen while building The Watcher that the original brief did not speci
 
 ## Milestone 1: Baseline
 
-- **Versions (checked against Google Maven / Maven Central on 2026-09-26):** AGP 9.4.1, Kotlin (compose compiler plugin) 2.4.20, Compose BOM 2026.09.00, lifecycle 2.11.0, activity-compose 1.13.0, core-ktx 1.19.1. The template's other versions were already current.
+- **Versions (checked against Google Maven / Maven Central on 2026-09-26):** AGP 9.4.1 (later pinned back to 9.2.1, see the bottom of this file), Kotlin (compose compiler plugin) 2.4.20, Compose BOM 2026.09.00, lifecycle 2.11.0, activity-compose 1.13.0, core-ktx 1.19.1. The template's other versions were already current.
 - **Gradle wrapper 9.4.1 → 9.8.0.** AGP 9.4.1 refuses to run on Gradle below 9.6.0, so I moved the wrapper to the latest stable release (checksum pinned) instead of holding AGP back.
 - **compileSdk/targetSdk 36 → 37.** Android 17 (API 37) is a stable, non-preview platform in the local SDK, and the test device (Pixel 7 Pro) runs it. The brief said to raise these if a newer stable level is out. minSdk stays 31.
 - **Kotlin version = compose compiler plugin version.** With AGP's built-in Kotlin, applying `org.jetbrains.kotlin.plugin.compose` at 2.4.20 also sets the Kotlin compiler version. There is no separate `kotlin-android` plugin.
@@ -72,3 +72,7 @@ Defaults chosen while building The Watcher that the original brief did not speci
 - **Idle life:** the lids "breathe" (±0.02 lidOpen, 5.3 s period) and the pupil hunts slightly (hippus, ±0.025, 3.1 s) in every state. 15% of idle saccades are curious long glances (reach 0.75, edge-biased), and 15% of spontaneous blinks are double blinks.
 - **Relief moment** is unchanged from milestone 2 (pupil to 0.35 + one slow 320/520 ms blink, then the tracking expression resumes). It was verified on device by denying and then granting the camera.
 - **Final merged manifest (debug and release):** `CAMERA` only, plus the app-private signature permission `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` (see milestone 5). No `INTERNET`, no `ACCESS_NETWORK_STATE`.
+
+## Iteration: Android Studio compatibility
+
+- **AGP pinned to 9.2.1, back from 9.4.1.** Android Studio 2025.3.4 (the IDE used for this project) bundles AGP 9.2.1 and refuses to sync projects that use a newer AGP. 9.4.1 built fine with `./gradlew` but broke Sync/Run in the IDE. **Rule: don't raise AGP above the version bundled with the installed Studio** (`Android Studio.app/Contents/plugins/android/lib/libagp-version.jar` → `version.properties`). The Gradle wrapper stays on 9.8.0; AGP 9.2.1 works with it.
