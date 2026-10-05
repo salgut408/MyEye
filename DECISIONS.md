@@ -37,3 +37,14 @@ Defaults chosen while building The Watcher that the original brief did not speci
 - **Mirror blink uses a strict `< 0.3`,** and unknown eye-open (`null`) never blinks.
 - **Closeness:** face size 0.12 → 0 and 0.45 → 1 (clamped), configurable in `WatcherConfig`. Pupil = 0.4 + 0.25·closeness.
 - **`Clock`, `Gaze`, `SeenFace`, `Perception` live in `watch/`** so the pure layer has no dependency on `camera/` or Compose.
+
+## Milestone 4: Fake source + ViewModel
+
+- **Coroutines 1.11.0 declared explicitly** (`kotlinx-coroutines-android`). Lifecycle only brings 1.9.0 transitively, and `kotlinx-coroutines-test` must match the runtime version. Turbine 1.2.1.
+- **Perceiving is tied to UI collection:** `uiState` uses `stateIn(WhileSubscribed(stopTimeoutMillis = 0))` and the UI collects with `collectAsStateWithLifecycle()` (STARTED). So the camera stops the instant the app leaves the screen, and starts again on return. A non-zero timeout would keep the camera open in the background, where Android revokes it anyway. Cost: a configuration change restarts the camera, which is rare with the portrait lock.
+- **The watcher, relief counter and FPS meter live in the ViewModel, not in the flow,** so its memory (who it was watching, how long it has been blind) survives the UI going away and coming back.
+- **Tick every 100 ms** (`WatcherViewModel.TICK_MS`) for time-based transitions. `StateFlow` dedups identical states, so idle ticks don't recompose anything.
+- **Permission is reported to the ViewModel by the UI** (`onCameraPermission`). Unknown (`null`) = perceive nothing and stay calm, so there's no panic flash before the first check. Denied = a single `NoPermission`; the tick drives the escalation.
+- **The fake source runs at 15 fps (66 ms),** about what low-res ImageAnalysis + ML Kit FAST manages on a mid-range phone. Scenario ids change every loop (and per scenario in the Tour), as ML Kit's would.
+- **Fake scenarios:** walk across, stranger steps closer, leaves and returns (re-acquire with a new id, then Lost → Idle), lights off (DARK → frantic → relief with a new id), blinker (mirror blink, including a long blink), plus a **Tour** that plays them all back to back. `FakeScenariosTest` checks each one really provokes its behavior.
+- **Temporary:** this milestone defaults the app to the fake Tour, since the camera arrives in milestone 5.
