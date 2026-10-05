@@ -9,7 +9,6 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.salg.myeye.camera.FaceSource
 import com.salg.myeye.camera.FakeFaceSource
 import com.salg.myeye.camera.FakeScenario
-import com.salg.myeye.camera.FakeScenarios
 import com.salg.myeye.ui.eye.EyeBehavior
 import com.salg.myeye.watch.Clock
 import com.salg.myeye.watch.Gaze
@@ -125,8 +124,6 @@ class WatcherViewModel(
                 )
             }
         }
-
-        val DefaultFake = SourceMode.Fake(FakeScenarios.Tour)
     }
 }
 

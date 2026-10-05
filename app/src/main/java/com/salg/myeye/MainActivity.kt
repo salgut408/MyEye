@@ -15,10 +15,11 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.salg.myeye.camera.FaceSource
+import com.salg.myeye.camera.CameraFaceSource
 import com.salg.myeye.ui.WatcherScreen
+import com.salg.myeye.ui.rememberCameraPermission
 import com.salg.myeye.ui.theme.MyEyeTheme
-import kotlinx.coroutines.flow.emptyFlow
+import com.salg.myeye.watch.Sight
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,12 +38,20 @@ class MainActivity : ComponentActivity() {
                 KeepScreenOn()
                 val viewModel: WatcherViewModel = viewModel(
                     factory = WatcherViewModel.factory(
-                        cameraSource = FaceSource { emptyFlow() }, // camera arrives in the next milestone
-                        initialSource = WatcherViewModel.DefaultFake,
+                        cameraSource = CameraFaceSource(applicationContext),
+                        initialSource = SourceMode.Camera,
                     ),
                 )
                 val state by viewModel.uiState.collectAsStateWithLifecycle()
-                WatcherScreen(state)
+                val askForCamera = rememberCameraPermission(viewModel::onCameraPermission)
+                WatcherScreen(
+                    state = state,
+                    onTap = {
+                        if (state.source == SourceMode.Camera && state.watcher.sight == Sight.NO_PERMISSION) askForCamera()
+                    },
+                    onSelectSource = viewModel::useSource,
+                    showSourcePicker = BuildConfig.DEBUG,
+                )
             }
         }
     }
