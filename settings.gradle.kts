@@ -25,4 +25,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "My Eye"
 include(":app")
+include(":core:watch")
  
